@@ -1,28 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as mp_plt
 from crf import crf_solve
-
-
-def plot_crf(crf_channel, C, Zmax):
-    mp_plt.figure(figsize=(24, 8))
-    channel_names = ['red', 'green', 'blue']
-    for ch in range(C):
-        mp_plt.subplot(1, 3, ch + 1)
-        mp_plt.plot(crf_channel[ch], np.arange(Zmax + 1), color=channel_names[ch], linewidth=2)
-        mp_plt.xlabel('log(X)')
-        mp_plt.ylabel('Pixel intensity')
-        mp_plt.title('CRF for {} channel'.format(channel_names[ch]))
-
-    mp_plt.figure(figsize=(8, 8))
-    for ch in range(C):
-        mp_plt.plot(crf_channel[ch], np.arange(Zmax + 1), color=channel_names[ch], linewidth=2,
-                    label=channel_names[ch] + ' channel')
-    mp_plt.xlabel('log(X)')
-    mp_plt.ylabel('Pixel intensity')
-    mp_plt.title('Camera Response Function'.format(channel_names[ch]))
-
-    mp_plt.legend()
-
 
 def hdr_debevec(images, B, lambda_=50, num_px=150):
     num_images = len(images)
@@ -52,5 +29,4 @@ def hdr_debevec(images, B, lambda_=50, num_px=150):
         crf_channel.append(crf)
         log_irrad_channel.append(log_irrad)
 
-    plot_crf(crf_channel, C, Zmax)
     return [crf_channel, log_irrad_channel, w]

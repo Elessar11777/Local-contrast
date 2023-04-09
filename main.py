@@ -9,14 +9,15 @@ tonemapped_img = cv2.cvtColor(tonemapped_img, cv2.COLOR_RGB2BGR)
 
 cv2.imwrite('tonemapped_image.bmp', tonemapped_img)
 """
-import sys
+import multiprocessing as mp
 from load_images import load_images
-import matplotlib.pyplot as mp_plt
 import numpy as np
 from hdr_debevec import hdr_debevec
 from irradiance import compute_irradiance
-from tonemap import reinhard_tonemap, plot_and_save, local_tonemap
-import cv2
+from tonemap import process_local_tonemap
+import os
+from memory_profiler import profile
+import gc
 
 
 def run_hdr(image_name, image_ext, root_dir, COMPUTE_CRF, kwargs):
@@ -29,15 +30,9 @@ def run_hdr(image_name, image_ext, root_dir, COMPUTE_CRF, kwargs):
         saturation_local = kwargs['saturation_local']
 
     [images, B] = load_images(root_dir, image_ext)
-
-    plot_idx = np.random.choice(len(images), (2,), replace=False)
-    mp_plt.figure(figsize=(16, 16))
-    mp_plt.subplot(1, 2, 1)
-    mp_plt.imshow(images[plot_idx[0]])
-    mp_plt.title("Exposure time: {} secs".format(np.exp(B[plot_idx[0]])))
-    mp_plt.subplot(1, 2, 2)
-    mp_plt.imshow(images[plot_idx[1]])
-    mp_plt.title("Exposure time: {} secs".format(np.exp(B[plot_idx[1]])))
+    if not images:
+        print(f"root_dir {root_dir} is empty")
+        return
 
     if (COMPUTE_CRF):
         [crf_channel, log_irrad_channel, w] = hdr_debevec(images, B, lambda_=lambda_, num_px=num_px)
@@ -52,10 +47,26 @@ def run_hdr(image_name, image_ext, root_dir, COMPUTE_CRF, kwargs):
         hdr_loc = kwargs['hdr_loc']
         [crf_channel, log_irrad_channel, w] = np.load(hdr_loc)
     irradiance_map = compute_irradiance(crf_channel, w, images, B)
-    tonemapped_img = reinhard_tonemap(irradiance_map, gamma=gamma, alpha=alpha)
+    del images
     #plot_and_save(tonemapped_img, root_dir, "Globally Tonemapped Image")
-    local_tonemap(irradiance_map, root_dir + image_name, saturation=saturation_local, gamma=gamma_local)
-    return [tonemapped_img, irradiance_map]
+    process_local_tonemap(irradiance_map, image_name, saturation=saturation_local, gamma=gamma_local)
+    return [None, irradiance_map]
+
+
+
+# def process_folder(foldername, image_ext, root_dir, compute_crf, kwargs):
+#     folder_path = os.path.join(root_dir, foldername)
+#     if os.path.isdir(folder_path):
+#         return run_hdr(foldername, image_ext, folder_path + "/", compute_crf, kwargs)
+
+def process_folder(foldername, image_ext, root_dir, compute_crf, kwargs):
+    folder_path = os.path.join(root_dir, foldername)
+    if os.path.isdir(folder_path):
+        # Check if a result image is present
+        result_image_path = os.path.join("./result/", f"{foldername}.png")
+        print(result_image_path)
+        if not os.path.exists(result_image_path):
+            return run_hdr(foldername, image_ext, folder_path + "/", compute_crf, kwargs)
 
 
 if __name__ == "__main__":
@@ -66,4 +77,12 @@ if __name__ == "__main__":
 
     kwargs = {'lambda_': 50, 'num_px': 150, 'gamma': 1 / 2.2, 'alpha': 0.35, 'hdr_loc': ROOT_DIR + "crf.npy",
           'gamma_local': 1.0, 'saturation_local': 2.5}
-    hdr_image, irmap = run_hdr("0.0", IMAGE_EXT, ROOT_DIR, COMPUTE_CRF, kwargs)
+
+    pool = mp.Pool(6, maxtasksperchild=1)
+    results = []
+    for foldername in os.listdir(ROOT_DIR):
+        results.append(pool.apply_async(process_folder, args=(foldername, IMAGE_EXT, ROOT_DIR, COMPUTE_CRF, kwargs)))
+    pool.close()
+    pool.join()
+    for res in results:
+        res.get()

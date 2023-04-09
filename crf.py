@@ -13,6 +13,7 @@
 """
 
 import numpy as np
+from memory_profiler import profile
 
 
 def crf_solve(Z, B, lambda_, w, Zmin, Zmax):
@@ -47,5 +48,5 @@ def crf_solve(Z, B, lambda_, w, Zmin, Zmax):
     x = output[0]
     g = x[:n]
     lE = x[n:]
-
+    del A, b
     return [g, lE]
